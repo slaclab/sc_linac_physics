@@ -24,6 +24,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.displays.mp_processing im
     PAUSE_TEXT,
     RESUME_TEXT,
     MPProcessingDisplay,
+    plot_top,
     since_last_quench_text,
 )
 
@@ -355,3 +356,88 @@ def test_stored_notes_show_the_newest_line_and_the_rest_on_hover(display):
     label = display.local_stored_notes
     assert label.text() == "resumed 1 (+2 more, hover)"
     assert label.toolTip() == data.notes
+
+
+def test_radiation_plot_draws_the_runs_points_and_quenches(display):
+    assert display.quench_tabs.tabText(1) == "Radiation vs amplitude"
+    with patch.object(
+        type(display.controller), "plot_points", new_callable=PropertyMock
+    ) as points:
+        points.return_value = ([(12.0, 0.5), (12.1, 3.0)], [(12.1, 3.0)])
+        display.refresh_progress()
+    xs, ys = display._reading_dots.getData()
+    assert list(xs) == [12.0, 12.1] and list(ys) == [0.5, 3.0]
+    qx, qy = display._quench_crosses.getData()
+    assert list(qx) == [12.1] and list(qy) == [3.0]
+    assert display._threshold_line.value() == 10.0
+    display.fe_pause_spin.setValue(4.0)
+    assert display._threshold_line.value() == 4.0
+
+
+def test_plot_top_ignores_a_few_spikes_but_fits_sustained_radiation():
+    assert plot_top([], 10.0) == 30.0
+    assert plot_top([0.5, 0.5, 300.0, 290.0], 10.0) == 30.0  # early in a run
+    readings = [0.5] * 98 + [400.0, 500.0]  # two MP quench spikes
+    assert plot_top(readings, 10.0) == 30.0
+    sustained = [0.5] * 50 + [60.0] * 50
+    assert plot_top(sustained, 10.0) == pytest.approx(72.0)
+
+
+def test_a_spike_is_drawn_on_the_top_edge_not_by_rescaling(display):
+    readings = [(12.0 + i / 100, 1.0) for i in range(50)] + [(12.5, 400.0)]
+    with patch.object(
+        type(display.controller), "plot_points", new_callable=PropertyMock
+    ) as points:
+        points.return_value = (readings, [(12.5, 400.0)])
+        display.refresh_progress()
+    _, on_ys = display._reading_dots.getData()
+    assert max(on_ys) == 1.0
+    off_xs, off_ys = display._off_scale.getData()
+    assert list(off_xs) == [12.5] and list(off_ys) == [30.0]
+    _, cross_ys = display._quench_crosses.getData()
+    assert list(cross_ys) == [30.0]
+    low, high = display.radiation_plot.getPlotItem().viewRange()[1]
+    assert high == pytest.approx(31.5)
+
+
+def test_plot_tabs_have_their_own_dark_style(display):
+    tabs = display.quench_tabs
+    assert tabs.objectName() == "mpQuenchTabs"
+    assert "QTabBar::tab" in tabs.styleSheet()
+
+
+def point_count(item) -> int:
+    """Points on a plot item; pyqtgraph returns None data when empty."""
+    xs = item.getData()[0]
+    return 0 if xs is None else len(xs)
+
+
+def test_full_range_shows_true_values_and_survives_refreshes(display):
+    readings = [(12.0 + i / 100, 1.0) for i in range(50)] + [(12.5, 400.0)]
+    display.full_range_check.setChecked(True)
+    with patch.object(
+        type(display.controller), "plot_points", new_callable=PropertyMock
+    ) as points:
+        points.return_value = (readings, [(12.5, 400.0)])
+        display.refresh_progress()
+        display.refresh_progress()
+    _, ys = display._reading_dots.getData()
+    assert max(ys) == 400.0
+    assert point_count(display._off_scale) == 0
+    _, cross_ys = display._quench_crosses.getData()
+    assert list(cross_ys) == [400.0]
+
+
+def test_clear_run_empties_the_plot(display):
+    with patch.object(
+        type(display.controller), "plot_points", new_callable=PropertyMock
+    ) as points:
+        points.return_value = ([(12.0, 1.0), (12.1, 500.0)], [(12.1, 500.0)])
+        display.refresh_progress()
+    display.clear_run()
+    for item in (
+        display._reading_dots,
+        display._quench_crosses,
+        display._off_scale,
+    ):
+        assert point_count(item) == 0

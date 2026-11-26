@@ -46,6 +46,8 @@ RF on in SELA at ADES_MAX when it completes.
 
 import threading
 import time
+
+import epics
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -75,6 +77,20 @@ from sc_linac_physics.utils.sc_linac.linac_utils import (
     CavityAbortError,
     CavityFaultError,
 )
+
+# The radiation vs amplitude plot leaves out readings below this AACTMEAN.
+PLOT_MIN_AACT_MV = 1.0
+# The plot's AACTMEAN read waits at most this long, once.
+PLOT_AACT_TIMEOUT = 0.2
+
+
+def quick_get(pv, timeout: float):
+    """One read of pv, or None: pyepics' own PV.get, cached monitor value.
+
+    Skips sc_linac_physics' PV wrapper, whose get waits to reconnect and
+    retries, for a value only the plot uses.
+    """
+    return epics.PV.get(pv, timeout=timeout, use_monitor=True)
 
 
 @dataclass
@@ -172,6 +188,13 @@ class MPProcessingPhase(PhaseBase):
         self._high_since: float | None = None
         # Last radiation reading, for the tab: above background, or None.
         self.radiation: float | None = None
+        # For the tab's radiation vs amplitude plot, this run only, not
+        # saved: (AACTMEAN in MV, highest head over background) at each
+        # radiation reading, and the newest of those before each quench.
+        # Appended on the worker thread; the tab only reads them.
+        self.points: list[tuple[float, float]] = []
+        self.quench_points: list[tuple[float, float]] = []
+        self._last_point: tuple[float, float] | None = None
 
     # ------------------------------------------------------------------
     # Pause and resume, called from the GUI thread
@@ -479,6 +502,9 @@ class MPProcessingPhase(PhaseBase):
         """
         while True:
             self._high_since = None
+            if self._last_point is not None:
+                self.quench_points.append(self._last_point)
+                self._last_point = None
             self.context.record.mp_processing.add_quench(
                 amplitude=amplitude, after_pause=self._after_pause
             )
@@ -509,8 +535,9 @@ class MPProcessingPhase(PhaseBase):
         say who resets.
         """
         self._paused = True
-        # Readings from before the pause don't count toward a radiation
-        # pause after it.
+        # Readings from before the pause don't go with a later quench, or
+        # count toward a radiation pause after it.
+        self._last_point = None
         self._high_since = None
         reason = self._auto_pause_reason
         self._auto_pause_reason = None
@@ -621,10 +648,11 @@ class MPProcessingPhase(PhaseBase):
         - any head is INVALID, or the read fails: a dead decarad reads 0,
           which would look like no radiation (2026-11-24 agenda);
         - the highest head is more than fe_pause_above over background.
-        Not checked with no decarad, after override_radiation(), or within
-        radiation_settle_seconds of an interlock reset.
+        Not read with no decarad, or within radiation_settle_seconds of an
+        interlock reset. Still read after override_radiation(), for the
+        tab's readout and plot; _watch then ignores the reason.
         """
-        if self.decarad is None or self._radiation_overridden.is_set():
+        if self.decarad is None:
             return None
         if time.monotonic() < self._radiation_quiet_until:
             return None
@@ -646,6 +674,7 @@ class MPProcessingPhase(PhaseBase):
                 f"{', '.join(map(str, invalid))} INVALID"
             )
         self.radiation = dose
+        self._add_point(dose)
         now = time.monotonic()
         if dose <= self.limits.fe_pause_above:
             self._high_since = None
@@ -662,6 +691,29 @@ class MPProcessingPhase(PhaseBase):
                 f" for {now - self._high_since:.0f} s, no quench"
             )
         return None
+
+    def _add_point(self, dose: float) -> None:
+        """One plot point: AACTMEAN (MV, read now) and this dose.
+
+        Reads AACTMEAN only, once, within PLOT_AACT_TIMEOUT (quick_get),
+        and not at all while it's disconnected: the latch poll this runs in
+        must not wait on a plot value. A failed read skips the point; it
+        never pauses or stops the walk. So does AACTMEAN under
+        PLOT_MIN_AACT_MV: RF isn't up (e.g. just after a reset), and the
+        point would only stretch the plot's amplitude axis.
+        """
+        pv = self.cavity.aact_pv_obj
+        try:
+            value = quick_get(pv, PLOT_AACT_TIMEOUT) if pv.connected else None
+            if value is None:
+                return
+            aact = float(value)
+        except Exception:
+            return
+        if aact < PLOT_MIN_AACT_MV:
+            return
+        self._last_point = (aact, dose)
+        self.points.append(self._last_point)
 
     def _note_amplitude(self, amplitude: float) -> None:
         """Keep the highest ADES written on the record."""

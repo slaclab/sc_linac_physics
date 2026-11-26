@@ -144,16 +144,28 @@ class MPProcessingController(QObject):
         return "running" if self.phase is None else self.phase.pause_state
 
     @property
+    def plot_points(self):
+        """(points, quench points) for the radiation plot, or ([], []).
+
+        Each point is (AACTMEAN in MV, highest head over background), from
+        MPProcessingPhase. This run only.
+        """
+        if self.phase is None:
+            return [], []
+        return list(self.phase.points), list(self.phase.quench_points)
+
+    @property
     def radiation_text(self) -> str:
         """The status box's "Decarad max" readout."""
         phase = self.phase
         if phase is None or phase.limits.decarad is None:
             return "off"
-        if phase.radiation_overridden:
-            return "not checked (I'm watching)"
         if phase.radiation is None:
             return "-"
-        return f"{phase.radiation:.1f} over background"
+        text = f"{phase.radiation:.1f} over background"
+        if phase.radiation_overridden:
+            text += " (not pausing: I'm watching)"
+        return text
 
     @property
     def radiation_check_on(self) -> bool:

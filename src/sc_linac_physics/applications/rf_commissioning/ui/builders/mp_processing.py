@@ -10,6 +10,7 @@ from typing import NamedTuple
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QGridLayout,
@@ -18,9 +19,12 @@ from PyQt5.QtWidgets import (
     QHeaderView,
     QLabel,
     QPushButton,
+    QTabWidget,
+    QWidget,
     QTableWidget,
     QVBoxLayout,
 )
+import pyqtgraph as pg
 from pydm.widgets import PyDMLabel
 
 from sc_linac_physics.applications.rf_commissioning.phases.mp_processing import (  # noqa: E501
@@ -96,6 +100,31 @@ QUENCH_TABLE_STYLE = f"""
         border: none;
         border-bottom: 1px solid {BORDER};
         padding: 3px;
+    }}
+"""
+
+
+QUENCH_TABS_STYLE = f"""
+    QTabWidget#mpQuenchTabs::pane {{
+        background-color: {BG_INSET};
+        border: 1px solid {BORDER};
+        border-top: none;
+    }}
+    QTabWidget#mpQuenchTabs > QTabBar::tab {{
+        background-color: {BG_PANEL};
+        color: {TEXT_SECONDARY};
+        padding: 4px 12px;
+        border: 1px solid {BORDER};
+        border-bottom: none;
+        font-family: {SANS_FONT_STACK};
+    }}
+    QTabWidget#mpQuenchTabs > QTabBar::tab:selected {{
+        background-color: {BG_INSET};
+        color: {TEXT_PRIMARY};
+        border-bottom: 2px solid {COLOR_PRIMARY};
+    }}
+    QTabWidget#mpQuenchTabs > QTabBar::tab:hover:!selected {{
+        background-color: {BG_INTERACTIVE};
     }}
 """
 
@@ -177,7 +206,8 @@ class MPProcessingUI(PhaseUIBase):
         grid.setColumnStretch(1, 1)
 
         main_layout.addLayout(grid)
-        main_layout.addWidget(self._build_quench_table(), stretch=1)
+        # The plot needs the height more than the log does.
+        main_layout.addWidget(self._build_quench_tabs(), stretch=2)
         main_layout.addWidget(self._build_history(), stretch=1)
         return main_layout
 
@@ -317,6 +347,60 @@ class MPProcessingUI(PhaseUIBase):
             grid.addWidget(label, row, 1)
         group.setLayout(grid)
         return group
+
+    def _build_quench_tabs(self) -> QTabWidget:
+        """The quench table and the radiation plot share one space."""
+        tabs = self._register("quench_tabs", QTabWidget(parent=self.parent))
+        # Dark like the phase tabs (multi_phase_screen.py), scoped by object
+        # name. Without it the tabs take the desktop's light palette.
+        tabs.setObjectName("mpQuenchTabs")
+        tabs.setStyleSheet(QUENCH_TABS_STYLE)
+        tabs.addTab(self._build_quench_table(), "Quenches")
+        tabs.addTab(self._build_radiation_tab(), "Radiation vs amplitude")
+        return tabs
+
+    def _build_radiation_tab(self) -> QWidget:
+        """The plot, with a Full range box above it."""
+        box = QWidget(parent=self.parent)
+        layout = QVBoxLayout()
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(2)
+        full = self._register(
+            "full_range_check", QCheckBox("Full range", parent=self.parent)
+        )
+        full.setToolTip(
+            "Fit every reading, spikes included. Off: the axis stops above "
+            "FE onset and higher readings show as triangles on the top edge."
+        )
+        full.setStyleSheet(f"QCheckBox {{ color: {TEXT_SECONDARY}; }}")
+        layout.addWidget(full, alignment=Qt.AlignRight)
+        layout.addWidget(self._build_radiation_plot(), stretch=1)
+        box.setLayout(layout)
+        return box
+
+    def _build_radiation_plot(self) -> pg.PlotWidget:
+        """Highest decarad head over background against AACTMEAN.
+
+        One point per radiation reading in this run, a red cross at each
+        quench and a dashed line at FE pause above. The display draws them
+        from the phase once a second.
+        """
+        plot = self._register(
+            "radiation_plot", pg.PlotWidget(parent=self.parent)
+        )
+        plot.setBackground(BG_INSET)
+        plot.showGrid(x=True, y=True, alpha=0.2)
+        plot.setLabel("bottom", "AACTMEAN", units="MV")
+        plot.setLabel("left", "Max head − bkg")
+        for side in ("bottom", "left"):
+            axis = plot.getAxis(side)
+            axis.setPen(TEXT_SECONDARY)
+            axis.setTextPen(TEXT_SECONDARY)
+        # Top left: points start at the start ADES, so they rarely reach
+        # there, and the threshold label sits at the right.
+        plot.addLegend(offset=(10, 5), labelTextColor=TEXT_SECONDARY)
+        plot.setMinimumHeight(80)
+        return plot
 
     def _build_quench_table(self) -> QGroupBox:
         """One row per quench this run recorded."""

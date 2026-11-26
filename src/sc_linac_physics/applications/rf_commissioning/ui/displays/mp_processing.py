@@ -2,7 +2,8 @@
 
 from datetime import datetime
 
-from PyQt5.QtCore import QTimer, pyqtSlot
+import pyqtgraph as pg
+from PyQt5.QtCore import Qt, QTimer, pyqtSlot
 from PyQt5.QtWidgets import QTableWidgetItem
 
 from sc_linac_physics.applications.rf_commissioning.models.data_models import (
@@ -25,6 +26,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.stale_result_prompt impor
 )
 
 from sc_linac_physics.applications.rf_commissioning.ui.builders.theme import (
+    COLOR_ERROR,
     COLOR_PRIMARY,
     COLOR_WARNING,
     SANS_FONT_STACK,
@@ -77,6 +79,27 @@ def since_last_quench_text(
     return f"{seconds // 60} min {seconds % 60:02d} s{suffix}"
 
 
+# plot_top uses the readings' 95th percentile only from this many on.
+PLOT_MIN_READINGS = 20
+
+
+def plot_top(doses: list[float], threshold: float) -> float:
+    """Top of the radiation plot's y axis, over background.
+
+    The larger of 3 x the FE pause threshold, so the line and the onset
+    below it always show, and, from PLOT_MIN_READINGS readings on, 1.2 x
+    the 95th percentile reading, so sustained radiation still fits. A
+    handful of MP quench spikes don't move it.
+    """
+    floor = 3 * max(threshold, 1.0)
+    # Too few readings for a percentile: two spikes would be the 95th.
+    if len(doses) < PLOT_MIN_READINGS:
+        return floor
+    ordered = sorted(doses)
+    p95 = ordered[min(len(ordered) - 1, int(0.95 * len(ordered)))]
+    return max(floor, 1.2 * p95)
+
+
 class MPProcessingDisplay(BasePlaceholderDisplay):
     """Display for the MP Processing phase."""
 
@@ -95,6 +118,8 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         self.controller = MPProcessingController(self, self.session)
         self.controller.phase_completed.connect(self._notify_phase_advanced)
         self.controller.setup_pv_connections()
+        # Empty plot on its default axes until the first refresh.
+        self._draw_radiation_plot()
 
     def setup_ui(self):
         callbacks = {
@@ -120,6 +145,9 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         self.override_radiation_button.clicked.connect(
             self.on_override_radiation
         )
+        self._build_plot_items()
+        self.fe_pause_spin.valueChanged.connect(self._draw_radiation_plot)
+        self.full_range_check.toggled.connect(self._draw_radiation_plot)
 
     # ------------------------------------------------------------------
     # Record
@@ -213,6 +241,88 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
             data is not None and not self.controller.running
         )
 
+    def _build_plot_items(self) -> None:
+        """The radiation plot's three items, filled by _draw_radiation_plot."""
+        plot = self.radiation_plot
+        self._reading_dots = plot.plot(
+            [],
+            [],
+            pen=None,
+            symbol="o",
+            symbolSize=5,
+            symbolPen=None,
+            symbolBrush=pg.mkBrush(COLOR_PRIMARY),
+            name="1 s readings",
+        )
+        self._quench_crosses = plot.plot(
+            [],
+            [],
+            pen=None,
+            symbol="x",
+            symbolSize=14,
+            symbolPen=pg.mkPen(COLOR_ERROR, width=2),
+            symbolBrush=pg.mkBrush(COLOR_ERROR),
+            name="just before a quench",
+        )
+        self._off_scale = plot.plot(
+            [],
+            [],
+            pen=None,
+            symbol="t1",
+            symbolSize=9,
+            symbolPen=None,
+            symbolBrush=pg.mkBrush(COLOR_WARNING),
+            name="off scale (spike)",
+        )
+        self._threshold_line = pg.InfiniteLine(
+            angle=0,
+            movable=False,
+            pen=pg.mkPen(COLOR_WARNING, width=1, style=Qt.DashLine),
+            label="FE pause above",
+            labelOpts={
+                "position": 0.97,
+                "anchors": [(1, 1), (1, 1)],
+                "color": COLOR_WARNING,
+            },
+        )
+        plot.addItem(self._threshold_line, ignoreBounds=False)
+
+    def _draw_radiation_plot(self, *_args) -> None:
+        """Redraw from this run's points. Reads no PVs.
+
+        MP quenches can spike far above FE onset, which would flatten the
+        low readings if the y axis fitted everything. So by default the axis
+        tops out at plot_top() and higher readings show as triangles on the
+        top edge. With Full range checked every point is at its real value
+        and the axis fits them all, until it is unchecked.
+        """
+        controller = getattr(self, "controller", None)
+        points, quenches = (
+            ([], []) if controller is None else controller.plot_points
+        )
+        threshold = self.fe_pause_spin.value()
+        self._threshold_line.setValue(threshold)
+        view = self.radiation_plot.getPlotItem()
+        xs = [a for a, _ in points]
+        if self.full_range_check.isChecked():
+            self._reading_dots.setData(xs, [d for _, d in points])
+            self._off_scale.setData([], [])
+            self._quench_crosses.setData(
+                [a for a, _ in quenches], [d for _, d in quenches]
+            )
+            view.enableAutoRange(x=True, y=True)
+            return
+        top = plot_top([dose for _, dose in points], threshold)
+        on = [(a, d) for a, d in points if d <= top]
+        off = [(a, top) for a, d in points if d > top]
+        self._reading_dots.setData([p[0] for p in on], [p[1] for p in on])
+        self._off_scale.setData([p[0] for p in off], [p[1] for p in off])
+        self._quench_crosses.setData(
+            [p[0] for p in quenches], [min(p[1], top) for p in quenches]
+        )
+        view.enableAutoRange(x=True, y=False)
+        view.setYRange(0, top * 1.05, padding=0)
+
     def set_settings_enabled(self, enabled: bool) -> None:
         for setting in SETTINGS:
             getattr(self, setting.widget).setEnabled(enabled)
@@ -259,6 +369,7 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         """Re-read this run's quenches. Reads no PVs."""
         self._show_pause_state()
         self.radiation_label.setText(self.controller.radiation_text)
+        self._draw_radiation_plot()
         self.override_radiation_button.setEnabled(
             self._pause_allowed and self.controller.radiation_check_on
         )
@@ -321,6 +432,9 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         self._process_started = None
         self._table_data = None
         self.quench_table.setRowCount(0)
+        # The timer is stopped after a run, so clear the plot here too.
+        for item in (self._reading_dots, self._quench_crosses, self._off_scale):
+            item.setData([], [])
         if not self.controller.running:
             self.ui.update_toolbar_state("idle")
             self.pause_button.setEnabled(False)

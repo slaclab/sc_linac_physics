@@ -553,3 +553,16 @@ def test_radiation_readout_text(controller):
     assert controller.radiation_text == "-"
     controller.phase.radiation = 3.25
     assert controller.radiation_text == "3.2 over background"
+
+
+def test_radiation_readout_after_im_watching_still_shows_the_reading(
+    controller,
+):
+    start_the_run_segment(controller)
+    controller.context.record.mp_processing = MPProcessingData()
+    controller.phase.limits.decarad = 1
+    controller.phase.radiation = 12.0
+    controller.on_override_radiation()
+    assert controller.radiation_text == (
+        "12.0 over background (not pausing: I'm watching)"
+    )
