@@ -353,5 +353,5 @@ def test_stored_notes_show_the_newest_line_and_the_rest_on_hover(display):
     )
     display._set_generic_stored_data(data)
     label = display.local_stored_notes
-    assert label.text() == "resumed 1 (+2 more; hover for all)"
+    assert label.text() == "resumed 1 (+2 more, hover)"
     assert label.toolTip() == data.notes

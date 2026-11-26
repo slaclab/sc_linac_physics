@@ -153,9 +153,7 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         label = self.local_stored_notes
         label.setToolTip(notes)
         if len(lines) > 1:
-            label.setText(
-                f"{lines[-1]} (+{len(lines) - 1} more; hover for all)"
-            )
+            label.setText(f"{lines[-1]} (+{len(lines) - 1} more, hover)")
 
     def on_record_loaded(
         self, record: CommissioningRecord, record_id: int
