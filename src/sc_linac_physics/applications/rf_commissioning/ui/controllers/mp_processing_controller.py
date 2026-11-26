@@ -340,6 +340,11 @@ class MPProcessingController(QObject):
                 return
             self._start("run", RUN_STEPS, offset=1, complete=True)
         elif self.stage == "run":
+            # The Field Emission box, as it reads now. verify_initial_state
+            # starts a fresh MPProcessingData, so values typed before or
+            # during the run are only applied here. Once: Retry save
+            # repeats only the failed writes, with the same run data.
+            self.apply_fe_fields(self.context.record.mp_processing)
             self._unsaved = set(FINISH_WRITES)
             self._persist_finish()
 
@@ -351,10 +356,6 @@ class MPProcessingController(QObject):
         writes.
         """
         record = self.context.record
-        # The Field Emission box, as it reads now. verify_initial_state
-        # starts a fresh MPProcessingData, so values typed before or during
-        # the run are only applied here.
-        self.apply_fe_fields(record.mp_processing)
         self._unsaved = persist_finished_phase(
             self.session,
             PHASE,
@@ -394,6 +395,10 @@ class MPProcessingController(QObject):
         self._cavity_hold.release()
         data = self.mp_data
         fresh = data is not None and data is not self._prior_data
+        if fresh:
+            # An aborted or failed run keeps what the operator saw. A
+            # failure before verify_initial_state leaves the last run alone.
+            self.apply_fe_fields(data)
         self._failure = (message, data.to_dict() if fresh else None)
         self._unsaved = {"save", "fail"}
         self._persist_failure()

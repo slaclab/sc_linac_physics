@@ -486,3 +486,47 @@ def test_save_fe_needs_a_run_and_nothing_running(controller, view, session):
     controller.save_fe_fields()
     assert view.show_error.call_count == 2
     session.save_active_record.assert_not_called()
+
+
+def test_a_failed_run_keeps_the_field_emission_box(
+    controller, view, session, record
+):
+    view.read_fe_fields.return_value = {"field_emission_onset": 13.1}
+    controller.on_start_test()
+    controller._on_segment_finished(
+        completed(verify_initial_state=check_data())
+    )
+    record.mp_processing = MPProcessingData()
+    controller._on_segment_finished(
+        SegmentResult(SegmentOutcome.ABORTED, "Aborted — RF is off")
+    )
+    assert record.mp_processing.field_emission_onset == 13.1
+    kwargs = session.fail_active_phase_instance.call_args.kwargs
+    assert kwargs["artifact_payload"]["field_emission_onset"] == 13.1
+
+
+def test_a_failed_check_leaves_the_last_runs_field_emission_alone(
+    controller, view, record
+):
+    old = MPProcessingData(field_emission_onset=12.0)
+    record.mp_processing = old
+    view.read_fe_fields.return_value = {"field_emission_onset": 13.1}
+    controller.on_start_test()
+    controller._on_segment_finished(
+        SegmentResult(SegmentOutcome.FAILED, "Cavity is not online")
+    )
+    assert old.field_emission_onset == 12.0
+
+
+def test_retry_save_keeps_the_field_emission_values_of_the_first_try(
+    controller, view, session, record
+):
+    view.read_fe_fields.return_value = {"field_emission_onset": 13.1}
+    session.add_measurement_to_history.return_value = False
+    run_to_the_end(controller, record)
+    assert controller.stage == "unsaved"
+
+    view.read_fe_fields.return_value = {"field_emission_onset": 99.0}
+    session.add_measurement_to_history.return_value = True
+    controller.on_start_test()  # Retry save
+    assert record.mp_processing.field_emission_onset == 13.1
