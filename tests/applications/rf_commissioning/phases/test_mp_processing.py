@@ -885,3 +885,34 @@ def test_a_quench_during_the_read_is_processed_not_paused_on(clock, record):
     # The quench went first: the radiation pause came after its reset and
     # settle time, not in place of it.
     assert cavity.resets and cavity.resets[0] < 5
+
+
+def test_a_spike_just_before_a_quench_is_processed_not_paused_on(clock, record):
+    # Spike in the t=2 reading; the latch is set by the t=3 poll.
+    cavity, phase = fe_phase(
+        clock, record, doses=[(0, 0.0), (2, 300.0), (3, 0.0)], quench_at=[3]
+    )
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+
+    assert "auto-paused" not in record.mp_processing.notes
+    assert record.mp_processing.quench_count == 1
+
+
+def test_one_high_reading_alone_does_not_pause(clock, record):
+    cavity, phase = fe_phase(
+        clock, record, doses=[(0, 0.0), (2, 40.0), (3, 0.0)]
+    )
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+    assert "auto-paused" not in record.mp_processing.notes
+
+
+def test_radiation_held_for_fe_pause_seconds_pauses(clock, record):
+    cavity, phase = fe_phase(
+        clock, record, doses=[(0, 0.0), (2, 40.0), (4, 0.0)]
+    )
+    cavity.actions = [(8, phase.request_resume)]
+
+    assert run_steps(phase).result is PhaseResult.SUCCESS
+    assert "for 1 s, no quench" in record.mp_processing.notes

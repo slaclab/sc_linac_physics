@@ -117,6 +117,14 @@ class MPProcessingLimits:
     # above background? quench_processing aborts at 2 above background.
     # CHECK: GAMMA_DOSE_RATE units, mR/h?
     fe_pause_above: float = 10.0
+    # How long radiation must stay above fe_pause_above before it pauses.
+    # MP quench spikes can show in the reading just before the latch sets;
+    # a spike then a quench within this time is processed as a quench. Per
+    # Ryan (2026-11-24): radiation with a quench in the last ~1 s is MP, and
+    # spikes don't matter unless sustained. Timed, not counted: reads at a
+    # step boundary come milliseconds apart.
+    # CHECK: is 1 s the right "sustained"?
+    fe_pause_seconds: float = 1.0
     # Radiation is ignored for this long after an interlock reset, since a
     # quench brings its own radiation (multipacting, not FE). 3 s is
     # quench_processing's DECARAD_SETTLE_TIME.
@@ -159,6 +167,9 @@ class MPProcessingPhase(PhaseBase):
         # pauses for the rest of this run.
         self._radiation_overridden = threading.Event()
         self._radiation_quiet_until = 0.0
+        # time.monotonic() of the first reading above fe_pause_above in the
+        # current stretch; None after a lower one, a quench or a pause.
+        self._high_since: float | None = None
         # Last radiation reading, for the tab: above background, or None.
         self.radiation: float | None = None
 
@@ -467,6 +478,7 @@ class MPProcessingPhase(PhaseBase):
         48 s in all, before raising CavityFaultError.
         """
         while True:
+            self._high_since = None
             self.context.record.mp_processing.add_quench(
                 amplitude=amplitude, after_pause=self._after_pause
             )
@@ -497,6 +509,9 @@ class MPProcessingPhase(PhaseBase):
         say who resets.
         """
         self._paused = True
+        # Readings from before the pause don't count toward a radiation
+        # pause after it.
+        self._high_since = None
         reason = self._auto_pause_reason
         self._auto_pause_reason = None
         # Noted now, so an abort while paused still leaves the pause on the
@@ -631,12 +646,20 @@ class MPProcessingPhase(PhaseBase):
                 f"{', '.join(map(str, invalid))} INVALID"
             )
         self.radiation = dose
-        if dose > self.limits.fe_pause_above:
+        now = time.monotonic()
+        if dose <= self.limits.fe_pause_above:
+            self._high_since = None
+        elif self._high_since is None:
+            self._high_since = now
+        if (
+            self._high_since is not None
+            and now - self._high_since >= self.limits.fe_pause_seconds
+        ):
             return (
                 f"radiation {dose:.1f} over background "
                 f"({DECARAD_BACKGROUND_READING_RAW}) on decarad "
                 f"{self.decarad.number}, above {self.limits.fe_pause_above:g}"
-                ", no quench"
+                f" for {now - self._high_since:.0f} s, no quench"
             )
         return None
 
