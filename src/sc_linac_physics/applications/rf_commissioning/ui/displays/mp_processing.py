@@ -13,6 +13,7 @@ from sc_linac_physics.applications.rf_commissioning.ui.builders import (
     MPProcessingUI,
 )
 from sc_linac_physics.applications.rf_commissioning.ui.builders.mp_processing import (  # noqa: E501
+    DECARAD_CHOICES,
     FE_DATA_FIELDS,
     SETTINGS,
 )
@@ -116,6 +117,9 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
         self.ui.update_toolbar_state("idle")
         self.pause_button.setEnabled(False)
         self.fe_save_button.clicked.connect(self.on_save_fe)
+        self.override_radiation_button.clicked.connect(
+            self.on_override_radiation
+        )
 
     # ------------------------------------------------------------------
     # Record
@@ -135,6 +139,23 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
             return
         self._set_generic_stored_data(data)
         self._apply_phase_specific_readouts(data)
+
+    def _set_generic_stored_data(self, phase_data) -> None:
+        """Stored Data, with Notes cut to its newest line.
+
+        Each pause and resume adds a line to notes. Shown whole they
+        stretched the window and squeezed Phase History. The full notes
+        are on the label's tooltip and in the database.
+        """
+        super()._set_generic_stored_data(phase_data)
+        notes = (getattr(phase_data, "notes", None) or "").strip()
+        lines = notes.splitlines()
+        label = self.local_stored_notes
+        label.setToolTip(notes)
+        if len(lines) > 1:
+            label.setText(
+                f"{lines[-1]} (+{len(lines) - 1} more; hover for all)"
+            )
 
     def on_record_loaded(
         self, record: CommissioningRecord, record_id: int
@@ -162,11 +183,15 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
     # Settings
     # ------------------------------------------------------------------
 
-    def read_settings(self) -> dict[str, float]:
+    def read_settings(self) -> dict[str, float | int | None]:
         """MPProcessingLimits keyword arguments from the Settings box."""
-        return {
+        settings = {
             s.field: getattr(self, s.widget).value() * s.scale for s in SETTINGS
         }
+        settings["decarad"] = DECARAD_CHOICES[
+            self.decarad_combo.currentIndex()
+        ][1]
+        return settings
 
     def read_fe_fields(self) -> dict[str, float | None]:
         """MPProcessingData field -> ADES in MV, or None for "not seen"."""
@@ -193,6 +218,7 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
     def set_settings_enabled(self, enabled: bool) -> None:
         for setting in SETTINGS:
             getattr(self, setting.widget).setEnabled(enabled)
+        self.decarad_combo.setEnabled(enabled)
 
     # ------------------------------------------------------------------
     # Progress, read from record.mp_processing
@@ -234,6 +260,10 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
     def refresh_progress(self, now: datetime | None = None) -> None:
         """Re-read this run's quenches. Reads no PVs."""
         self._show_pause_state()
+        self.radiation_label.setText(self.controller.radiation_text)
+        self.override_radiation_button.setEnabled(
+            self._pause_allowed and self.controller.radiation_check_on
+        )
         data = self.controller.mp_data
         now = now or datetime.now()
         if data is None:
@@ -359,6 +389,11 @@ class MPProcessingDisplay(BasePlaceholderDisplay):
     @pyqtSlot()
     def on_start_test(self):
         self.controller.on_start_test()
+
+    @pyqtSlot()
+    def on_override_radiation(self):
+        self.controller.on_override_radiation()
+        self.override_radiation_button.setEnabled(False)
 
     @pyqtSlot()
     def on_save_fe(self):

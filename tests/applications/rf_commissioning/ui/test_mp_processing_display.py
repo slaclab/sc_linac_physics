@@ -320,3 +320,38 @@ def test_field_emission_box_stays_editable_during_a_run(display):
     display.set_running(True)
     assert display.fe_onset_spin.isEnabled()
     assert not display.fe_save_button.isEnabled()
+
+
+def test_decarad_choice_reaches_the_limits_and_locks_during_a_run(display):
+    assert display.read_settings()["decarad"] is None  # Off by default
+    assert display.read_settings()["fe_pause_above"] == 10.0
+    display.decarad_combo.setCurrentIndex(2)
+    assert display.read_settings()["decarad"] == 2
+    display.set_running(True)
+    assert not display.decarad_combo.isEnabled()
+
+
+def test_im_watching_is_offered_only_while_radiation_is_checked(display):
+    display.set_running(True)
+    display.on_step_started("process")
+    with patch.object(
+        type(display.controller),
+        "radiation_check_on",
+        new_callable=PropertyMock,
+    ) as on:
+        on.return_value = True
+        display.refresh_progress()
+        assert display.override_radiation_button.isEnabled()
+        on.return_value = False
+        display.refresh_progress()
+        assert not display.override_radiation_button.isEnabled()
+
+
+def test_stored_notes_show_the_newest_line_and_the_rest_on_hover(display):
+    data = MPProcessingData(
+        notes="kept the SSA calibration\npaused 1\nresumed 1"
+    )
+    display._set_generic_stored_data(data)
+    label = display.local_stored_notes
+    assert label.text() == "resumed 1 (+2 more; hover for all)"
+    assert label.toolTip() == data.notes

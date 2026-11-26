@@ -10,6 +10,7 @@ from typing import NamedTuple
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QDoubleSpinBox,
     QGridLayout,
     QGroupBox,
@@ -62,6 +63,23 @@ SETTING_SPIN_STYLE = f"""
         background-color: {BG_INSET};
         color: {TEXT_DISABLED};
     }}
+    QComboBox {{
+        background-color: {BG_INTERACTIVE};
+        color: {TEXT_PRIMARY};
+        border: 1px solid {BORDER};
+        border-radius: 3px;
+        padding: 2px 4px;
+    }}
+    QComboBox:focus {{ border: 1px solid {ACCENT_LOCAL}; }}
+    QComboBox:disabled {{
+        background-color: {BG_INSET};
+        color: {TEXT_DISABLED};
+    }}
+    QComboBox QAbstractItemView {{
+        background-color: {BG_INTERACTIVE};
+        color: {TEXT_PRIMARY};
+        selection-background-color: {ACCENT_LOCAL};
+    }}
 """
 QUENCH_TABLE_STYLE = f"""
     QTableWidget {{
@@ -110,7 +128,12 @@ SETTINGS = (
             "s", 5.0, 3600.0, 5.0, 0),
     Setting("stable_minutes_spin", "Hold at ADES_MAX:", "stable_seconds",
             "min", 0.5, 120.0, 0.5, 1, scale=60.0),
+    # Over DECARAD_BACKGROUND_READING_RAW; see MPProcessingLimits.
+    Setting("fe_pause_spin", "FE pause above:", "fe_pause_above",
+            "over bkg", 0.5, 1000.0, 1.0, 1),
 )  # fmt: skip
+# Decarad choices on the Settings box -> MPProcessingLimits.decarad.
+DECARAD_CHOICES = (("Off", None), ("1", 1), ("2", 2))
 
 
 # Spin box name -> caption, for the MPProcessingData fields in FE_DATA_FIELDS.
@@ -170,6 +193,7 @@ class MPProcessingUI(PhaseUIBase):
             ("Quenches:", "quench_count_label"),
             ("Highest ADES written:", "max_ades_label"),
             ("Since last quench:", "since_quench_label"),
+            ("Decarad max:", "radiation_label"),
         )
         for row, (caption, name) in enumerate(rows):
             layout.addWidget(QLabel(caption), row, 0)
@@ -198,6 +222,16 @@ class MPProcessingUI(PhaseUIBase):
             spin.setValue(getattr(defaults, setting.field) / setting.scale)
             layout.addWidget(QLabel(setting.caption), row, 0)
             layout.addWidget(spin, row, 1)
+        combo = self._register("decarad_combo", QComboBox(parent=self.parent))
+        combo.setStyleSheet(SETTING_SPIN_STYLE)
+        for text, _ in DECARAD_CHOICES:
+            combo.addItem(text)
+        combo.setToolTip(
+            "Decarad whose GAMMA_DOSE_RATE pauses the walk. Off: no "
+            "radiation pause."
+        )
+        layout.addWidget(QLabel("Decarad:"), len(SETTINGS), 0)
+        layout.addWidget(combo, len(SETTINGS), 1)
         group.setLayout(layout)
         return group
 
@@ -241,6 +275,16 @@ class MPProcessingUI(PhaseUIBase):
         """)
         save.setEnabled(False)
         layout.addWidget(save)
+        watching = self._register(
+            "override_radiation_button", QPushButton("I'm watching")
+        )
+        watching.setToolTip(
+            "Stop radiation pauses for the rest of this run. Your name is "
+            "recorded in the notes."
+        )
+        watching.setStyleSheet(save.styleSheet())
+        watching.setEnabled(False)
+        layout.addWidget(watching)
         group.setLayout(layout)
         return group
 

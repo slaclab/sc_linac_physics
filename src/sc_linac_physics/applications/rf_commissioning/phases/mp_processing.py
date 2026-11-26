@@ -21,8 +21,14 @@ What it does to the machine, in order:
 
 It resets every quench, real or not: resetting after a quench is the
 processing. quench_processing's reset_quench() refuses real quenches and is
-not used. No retry cap: the operator aborts. Field emission and hard quench
-are later PRs.
+not used. No retry cap: the operator aborts. Hard quench is a later PR.
+
+Field-emission pause (2026-11-24 meeting): with a decarad chosen, each
+latch poll also reads GAMMA_DOSE_RATE on its 10 heads. Radiation above
+fe_pause_above (over background) with no quench just before, an INVALID
+head, or a failed read pauses the walk the same way Pause does, RF on.
+override_radiation() turns that off for the rest of the run. The check
+does not run during setup_rf's walk to the start ADES.
 
 Pause and inspect (2026-10-27 spec): request_pause() from the GUI thread
 stops process at its next latch poll (within poll_interval). While paused
@@ -62,7 +68,10 @@ from sc_linac_physics.applications.rf_commissioning.phases.phase_base import (
     PhaseResult,
     PhaseStepResult,
 )
+from sc_linac_physics.utils.epics import EPICS_INVALID_VAL
+from sc_linac_physics.utils.sc_linac.decarad import Decarad
 from sc_linac_physics.utils.sc_linac.linac_utils import (
+    DECARAD_BACKGROUND_READING_RAW,
     CavityAbortError,
     CavityFaultError,
 )
@@ -96,6 +105,22 @@ class MPProcessingLimits:
     # setup_rf keeps an SSA calibration or characterization younger than
     # this. Same one hour as the piezo with RF phase.
     recent_result_seconds: float = RECENT_RESULT_SECONDS
+    # Field-emission pause (2026-11-24 meeting). Decarad 1 or 2, chosen on
+    # the tab, or None for no radiation check. The check reads
+    # GAMMA_DOSE_RATE on all 10 heads of that decarad, as quench_processing
+    # does (Decarad.max_raw_dose), not the 10 s GAMMAAVE average.
+    decarad: int | None = None
+    # Pause when the highest head reads more than this above
+    # DECARAD_BACKGROUND_READING_RAW (8) with no quench just before.
+    # CHECK: default threshold. Ryan, 2026-11-24: "above ~8 instantaneous",
+    # "10 or 20 might be enough"; his decarad look is due. Is "8" raw or
+    # above background? quench_processing aborts at 2 above background.
+    # CHECK: GAMMA_DOSE_RATE units, mR/h?
+    fe_pause_above: float = 10.0
+    # Radiation is ignored for this long after an interlock reset, since a
+    # quench brings its own radiation (multipacting, not FE). 3 s is
+    # quench_processing's DECARAD_SETTLE_TIME.
+    radiation_settle_seconds: float = 3.0
 
 
 class _Seen(Enum):
@@ -126,6 +151,16 @@ class MPProcessingPhase(PhaseBase):
         # When the last pause ended. The tab counts "since last quench"
         # from here when it is later than the last quench.
         self.resumed_at: datetime | None = None
+        # Built in _process from limits.decarad. Tests set a fake first.
+        self.decarad = None
+        # Why the walk paused itself; None for the operator's Pause.
+        self._auto_pause_reason: str | None = None
+        # Set from the GUI thread by override_radiation(): no radiation
+        # pauses for the rest of this run.
+        self._radiation_overridden = threading.Event()
+        self._radiation_quiet_until = 0.0
+        # Last radiation reading, for the tab: above background, or None.
+        self.radiation: float | None = None
 
     # ------------------------------------------------------------------
     # Pause and resume, called from the GUI thread
@@ -143,6 +178,27 @@ class MPProcessingPhase(PhaseBase):
         """
         if self._paused:
             self._resume_requested.set()
+
+    def override_radiation(self, operator: str) -> None:
+        """Stop radiation pauses for the rest of this run. Writes no PVs.
+
+        For an operator watching the decarad by hand, since a Resume while
+        radiation stays high would pause again at once (Ryan, 2026-11-24).
+        Noted with the operator's name and time.
+        CHECK: rest of the run, or until the operator turns the check back
+        on? The meeting didn't say.
+        """
+        if self._radiation_overridden.is_set():
+            return
+        self._radiation_overridden.set()
+        self._append_note(
+            f"radiation pause overridden by {operator} at "
+            f"{datetime.now():%H:%M:%S}"
+        )
+
+    @property
+    def radiation_overridden(self) -> bool:
+        return self._radiation_overridden.is_set()
 
     @property
     def pause_state(self) -> str:
@@ -316,6 +372,7 @@ class MPProcessingPhase(PhaseBase):
             return self._dry_run_result("MP processing")
         if self.context.record.mp_processing is None:
             self.context.record.mp_processing = MPProcessingData()
+        self._start_radiation_check()
         try:
             amplitude = self._walk_to_ades_max()
         except CavityAbortError as exc:
@@ -417,6 +474,9 @@ class MPProcessingPhase(PhaseBase):
             time.sleep(self.limits.quench_settle_seconds)
             self.cavity.check_abort()
             self.cavity.reset_interlocks()
+            self._radiation_quiet_until = (
+                time.monotonic() + self.limits.radiation_settle_seconds
+            )
             # A Pause pressed during the reset goes first. Watching first
             # would let back-to-back quenches put it off indefinitely.
             if self._pause_requested.is_set():
@@ -437,11 +497,22 @@ class MPProcessingPhase(PhaseBase):
         say who resets.
         """
         self._paused = True
+        reason = self._auto_pause_reason
+        self._auto_pause_reason = None
         # Noted now, so an abort while paused still leaves the pause on the
         # record.
+        what = f"auto-paused ({reason})" if reason else "paused"
         self._append_note(
-            f"paused {datetime.now():%H:%M:%S} at {amplitude:.2f} MV"
+            f"{what} {datetime.now():%H:%M:%S} at {amplitude:.2f} MV"
         )
+        if reason:
+            self.cavity.logger.warning(
+                "MP processing paused itself at %.2f MV: %s. RF stays on. "
+                "Check the radiation, then Resume, or press I'm watching "
+                "to stop radiation pauses for this run.",
+                amplitude,
+                reason,
+            )
         self.cavity.logger.info(
             "MP processing paused at %.2f MV. No ADES writes or interlock "
             "resets until Resume.",
@@ -489,10 +560,69 @@ class MPProcessingPhase(PhaseBase):
                 return _Seen.QUENCH
             if self._pause_requested.is_set():
                 return _Seen.PAUSE
+            reason = self._radiation_pause_reason()
+            if reason is not None:
+                self._auto_pause_reason = reason
+                self._pause_requested.set()
+                return _Seen.PAUSE
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return _Seen.QUIET
             time.sleep(min(self.limits.poll_interval, remaining))
+
+    def _start_radiation_check(self) -> None:
+        """Set up the decarad from limits.decarad, and note which one."""
+        if self.decarad is None and self.limits.decarad is not None:
+            self.decarad = Decarad(self.limits.decarad)
+        data = self.context.record.mp_processing
+        data.decarad = self.limits.decarad
+        if self.decarad is None:
+            self.cavity.logger.warning(
+                "No decarad selected: MP processing will not pause on "
+                "radiation. Watch the decarad by hand."
+            )
+
+    def _radiation_pause_reason(self) -> str | None:
+        """Why radiation should pause the walk now, or None.
+
+        Reads GAMMA_DOSE_RATE and its severity on every head of the chosen
+        decarad. Pauses when:
+        - any head is INVALID, or the read fails: a dead decarad reads 0,
+          which would look like no radiation (2026-11-24 agenda);
+        - the highest head is more than fe_pause_above over background.
+        Not checked with no decarad, after override_radiation(), or within
+        radiation_settle_seconds of an interlock reset.
+        """
+        if self.decarad is None or self._radiation_overridden.is_set():
+            return None
+        if time.monotonic() < self._radiation_quiet_until:
+            return None
+        heads = self.decarad.heads.values()
+        try:
+            invalid = [
+                head.number
+                for head in heads
+                if head.raw_dose_rate_pv_obj.severity == EPICS_INVALID_VAL
+            ]
+            dose = float(self.decarad.max_raw_dose)
+        except Exception as exc:
+            self.radiation = None
+            return f"decarad {self.decarad.number} read failed: {exc}"
+        if invalid:
+            self.radiation = None
+            return (
+                f"decarad {self.decarad.number} head(s) "
+                f"{', '.join(map(str, invalid))} INVALID"
+            )
+        self.radiation = dose
+        if dose > self.limits.fe_pause_above:
+            return (
+                f"radiation {dose:.1f} over background "
+                f"({DECARAD_BACKGROUND_READING_RAW}) on decarad "
+                f"{self.decarad.number}, above {self.limits.fe_pause_above:g}"
+                ", no quench"
+            )
+        return None
 
     def _note_amplitude(self, amplitude: float) -> None:
         """Keep the highest ADES written on the record."""
